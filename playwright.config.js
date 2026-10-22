@@ -8,7 +8,7 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:5173",
     timeout: 60000,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     env: { DB_FILE: "data/e2e.db" },
   },
   reporter: "list",
