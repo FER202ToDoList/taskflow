@@ -1,13 +1,21 @@
 import { useState } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useFormik } from "formik";
-import { Modal, Button, Form, Alert } from "react-bootstrap";
+import {
+  Modal,
+  Button,
+  Form,
+  Alert,
+  ToggleButton,
+  ToggleButtonGroup,
+} from "react-bootstrap";
 import { saveTask } from "../store";
 import { blankTask } from "../utils/tasks";
 import { taskSchema } from "../utils/validation";
 
-export default function TaskEditor({ task, onClose, onSaved, projects }) {
+export default function TaskEditor({ task, onClose, onSaved }) {
   const dispatch = useDispatch();
+  const projects = useSelector((s) => s.app.projects);
   const [error, setError] = useState("");
   const form = useFormik({
     initialValues: { ...blankTask, ...task },
@@ -15,14 +23,7 @@ export default function TaskEditor({ task, onClose, onSaved, projects }) {
     onSubmit: async (values) => {
       setError("");
       try {
-        const {
-          title,
-          description,
-          due_date,
-          priority,
-          project_id,
-          completed,
-        } = values;
+        const { title, description, due_date, priority, project_id, completed } = values;
         await dispatch(
           saveTask({
             id: task.id,
@@ -37,13 +38,13 @@ export default function TaskEditor({ task, onClose, onSaved, projects }) {
         onSaved(task.id ? "Task updated." : "Task added.");
         onClose();
       } catch (message) {
+        // Keep the form open with the user's input so they can retry.
         setError(message);
       }
     },
   });
   const fieldProps = (name) => ({
     name,
-    id: `task-${name}`,
     value: form.values[name] || "",
     onChange: form.handleChange,
     onBlur: form.handleBlur,
@@ -52,24 +53,16 @@ export default function TaskEditor({ task, onClose, onSaved, projects }) {
   const close = () => {
     if (!form.isSubmitting) onClose();
   };
+
   return (
-    <Modal
-      show
-      onHide={close}
-      centered
-      backdrop={form.isSubmitting ? "static" : true}
-    >
-      <Form
-        noValidate
-        onSubmit={form.handleSubmit}
-        aria-busy={form.isSubmitting}
-      >
+    <Modal show onHide={close} centered backdrop={form.isSubmitting ? "static" : true}>
+      <Form noValidate onSubmit={form.handleSubmit} aria-busy={form.isSubmitting}>
         <Modal.Header closeButton={!form.isSubmitting}>
-          <Modal.Title>{task.id ? "Edit task" : "Add a task"}</Modal.Title>
+          <Modal.Title>{task.id ? "Edit task" : "New task"}</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           {error && <Alert variant="danger">{error}</Alert>}
-          <fieldset disabled={form.isSubmitting}>
+          <fieldset disabled={form.isSubmitting} className="editor-body">
             <Form.Group controlId="task-title">
               <Form.Label>Task title</Form.Label>
               <Form.Control
@@ -78,24 +71,22 @@ export default function TaskEditor({ task, onClose, onSaved, projects }) {
                 maxLength={200}
                 placeholder="What needs doing?"
               />
-              <Form.Control.Feedback type="invalid">
-                {form.errors.title}
-              </Form.Control.Feedback>
+              <Form.Control.Feedback type="invalid">{form.errors.title}</Form.Control.Feedback>
             </Form.Group>
-            <Form.Group className="mt-3" controlId="task-description">
+            <Form.Group controlId="task-description">
               <Form.Label>Description</Form.Label>
               <Form.Control
                 {...fieldProps("description")}
                 as="textarea"
                 rows={3}
                 maxLength={2000}
-                placeholder="Description"
+                placeholder="Add a few details (optional)"
               />
               <Form.Control.Feedback type="invalid">
                 {form.errors.description}
               </Form.Control.Feedback>
             </Form.Group>
-            <div className="editor-options">
+            <div className="editor-row">
               <Form.Group controlId="task-due_date">
                 <Form.Label>Due date</Form.Label>
                 <Form.Control {...fieldProps("due_date")} type="date" />
@@ -103,46 +94,51 @@ export default function TaskEditor({ task, onClose, onSaved, projects }) {
                   {form.errors.due_date}
                 </Form.Control.Feedback>
               </Form.Group>
-              <Form.Group controlId="task-priority">
-                <Form.Label>Priority</Form.Label>
-                <Form.Select {...fieldProps("priority")}>
-                  {[1, 2, 3, 4].map((n) => (
-                    <option value={n} key={n}>
-                      Priority {n}
-                      {n === 1 ? " · High" : n === 4 ? " · Normal" : ""}
+              <Form.Group controlId="task-project_id">
+                <Form.Label>Project</Form.Label>
+                <Form.Select {...fieldProps("project_id")}>
+                  <option value="">Inbox</option>
+                  {projects.map((p) => (
+                    <option value={p.id} key={p.id}>
+                      {p.name}
                     </option>
                   ))}
                 </Form.Select>
               </Form.Group>
             </div>
-            <Form.Group className="mt-3" controlId="task-project_id">
-              <Form.Label>Project</Form.Label>
-              <Form.Select {...fieldProps("project_id")}>
-                <option value="">Inbox</option>
-                {projects.map((p) => (
-                  <option value={p.id} key={p.id}>
-                    {p.name}
-                  </option>
+            <div role="group" aria-labelledby="priority-label">
+              <div className="form-label" id="priority-label">
+                Priority
+              </div>
+              <ToggleButtonGroup
+                type="radio"
+                name="priority"
+                className="priority-picker"
+                value={Number(form.values.priority)}
+                onChange={(value) => form.setFieldValue("priority", value)}
+              >
+                {[1, 2, 3, 4].map((n) => (
+                  <ToggleButton
+                    key={n}
+                    id={"priority-" + n}
+                    value={n}
+                    variant="outline-secondary"
+                    className={"p" + n}
+                  >
+                    P{n}
+                    {n === 1 ? " · High" : ""}
+                  </ToggleButton>
                 ))}
-              </Form.Select>
-            </Form.Group>
+              </ToggleButtonGroup>
+            </div>
           </fieldset>
         </Modal.Body>
         <Modal.Footer>
-          <Button
-            variant="light"
-            type="button"
-            disabled={form.isSubmitting}
-            onClick={close}
-          >
+          <Button variant="link" type="button" disabled={form.isSubmitting} onClick={close}>
             Cancel
           </Button>
           <Button type="submit" disabled={form.isSubmitting}>
-            {form.isSubmitting
-              ? "Saving…"
-              : task.id
-                ? "Save changes"
-                : "Add task"}
+            {form.isSubmitting ? "Saving…" : task.id ? "Save changes" : "Add task"}
           </Button>
         </Modal.Footer>
       </Form>

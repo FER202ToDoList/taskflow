@@ -1,1 +1,21 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#dc4c3e"><title>Taskflow — A little focus, every day</title></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0e1014" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Taskflow — your tasks on one board</title>
+    <script>
+      // Apply the saved theme before React loads, so the page never flashes.
+      try {
+        if (localStorage.getItem("taskflow-theme") === "light")
+          document.documentElement.setAttribute("data-bs-theme", "light");
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

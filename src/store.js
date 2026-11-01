@@ -7,6 +7,7 @@ import {
 import { api, errorText } from "./api";
 
 const TOKEN_KEY = "taskflow-token";
+const THEME_KEY = "taskflow-theme";
 
 // Wraps an API call so a failed request rejects with a readable message.
 const apiThunk = (type, request) =>
@@ -39,6 +40,7 @@ export const loadWorkspace = apiThunk("workspace/load", async () => {
 });
 
 // ---- Tasks ----
+// saveTask creates a task when there is no id, otherwise sends a (partial) PATCH.
 export const saveTask = apiThunk("tasks/save", async ({ id, ...body }) => {
   const { data } = id
     ? await api.patch(`/tasks/${id}`, body)
@@ -57,8 +59,11 @@ export const deleteTask = apiThunk("tasks/delete", async (id) => {
 });
 
 // ---- Projects ----
-export const addProject = apiThunk("projects/add", async (project) => {
-  const { data } = await api.post("/projects", project);
+// saveProject creates a project when there is no id, otherwise renames/recolours it.
+export const saveProject = apiThunk("projects/save", async ({ id, ...body }) => {
+  const { data } = id
+    ? await api.patch(`/projects/${id}`, body)
+    : await api.post("/projects", body);
   return data;
 });
 export const deleteProject = apiThunk("projects/delete", async (id) => {
@@ -73,6 +78,13 @@ const signIn = (state, { payload }) => {
   state.error = "";
 };
 
+const upsert = (list, item) => {
+  const index = list.findIndex((x) => x.id === item.id);
+  if (index === -1) list.push(item);
+  else list[index] = item;
+};
+
+// Data that comes from the API.
 const slice = createSlice({
   name: "app",
   initialState: {
@@ -115,8 +127,8 @@ const slice = createSlice({
       .addCase(deleteTask.fulfilled, (state, { payload: id }) => {
         state.tasks = state.tasks.filter((t) => t.id !== id);
       })
-      .addCase(addProject.fulfilled, (state, { payload }) => {
-        state.projects.push(payload);
+      .addCase(saveProject.fulfilled, (state, { payload }) => {
+        upsert(state.projects, payload);
       })
       .addCase(deleteProject.fulfilled, (state, { payload: id }) => {
         state.projects = state.projects.filter((p) => p.id !== id);
@@ -127,13 +139,55 @@ const slice = createSlice({
       })
       .addMatcher(
         isAnyOf(saveTask.fulfilled, toggleTask.fulfilled),
-        (state, { payload }) => {
-          const index = state.tasks.findIndex((t) => t.id === payload.id);
-          if (index === -1) state.tasks.push(payload);
-          else state.tasks[index] = payload;
-        },
+        (state, { payload }) => upsert(state.tasks, payload),
       ),
 });
 
+function savedTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+// Interface state shared by several components: theme, search and view options.
+const uiSlice = createSlice({
+  name: "ui",
+  initialState: {
+    theme: savedTheme(),
+    query: "",
+    status: "all",
+    priority: "",
+    sort: "date",
+  },
+  reducers: {
+    toggleTheme(state) {
+      state.theme = state.theme === "dark" ? "light" : "dark";
+      try {
+        localStorage.setItem(THEME_KEY, state.theme);
+      } catch {
+        // Storage blocked: the theme still works for this visit.
+      }
+    },
+    setQuery(state, action) {
+      state.query = action.payload;
+    },
+    setStatus(state, action) {
+      state.status = action.payload;
+    },
+    setPriority(state, action) {
+      state.priority = action.payload;
+    },
+    setSort(state, action) {
+      state.sort = action.payload;
+    },
+  },
+});
+
 export const { signedOut, clearError } = slice.actions;
-export const store = configureStore({ reducer: { app: slice.reducer } });
+export const { toggleTheme, setQuery, setStatus, setPriority, setSort } =
+  uiSlice.actions;
+export const store = configureStore({
+  reducer: { app: slice.reducer, ui: uiSlice.reducer },
+});

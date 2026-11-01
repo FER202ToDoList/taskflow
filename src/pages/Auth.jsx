@@ -2,34 +2,42 @@ import { useState } from "react";
 import { useDispatch } from "react-redux";
 import { useNavigate } from "react-router";
 import { Form, Button, Alert } from "react-bootstrap";
-import { CheckCheck, ArrowRight } from "lucide-react";
+import { ArrowRight, Check, CheckCheck } from "lucide-react";
 import { useFormik } from "formik";
 import { authSchema } from "../utils/validation";
 import { login, register as registerUser } from "../store";
+import ThemeToggle from "../components/ThemeToggle";
+
+const DEMO = { email: "demo@taskflow.local", password: "Demo123!" };
+
+// Small static board shown next to the form.
+const preview = [
+  ["Today", [["P1", "Finish the React assignment"], ["P2", "Plan the week ahead"]]],
+  ["Upcoming", [["P2", "Prepare the presentation"], ["P3", "Practice Redux and Axios"]]],
+  ["Done", [["P4", "Set up my workspace"]]],
+];
 
 export default function Auth() {
   const [register, setRegister] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
   const [error, setError] = useState("");
-  const dispatch = useDispatch(),
-    navigate = useNavigate();
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
   async function authenticate(values, demo = false) {
     setError("");
     try {
       const action =
         register && !demo
-          ? registerUser({
-              ...values,
-              name: values.name.trim(),
-              email: values.email.trim(),
-            })
+          ? registerUser({ ...values, name: values.name.trim(), email: values.email.trim() })
           : login({ email: values.email.trim(), password: values.password });
       await dispatch(action).unwrap();
-      navigate("/today");
+      navigate("/board");
     } catch (message) {
       setError(message);
     }
   }
+
   const form = useFormik({
     initialValues: { name: "", email: "", password: "" },
     validationSchema: authSchema(register),
@@ -44,95 +52,75 @@ export default function Auth() {
     disabled: busy,
     isInvalid: Boolean(form.touched[name] && form.errors[name]),
   });
+
   async function demoLogin() {
     setDemoBusy(true);
     try {
-      await authenticate(
-        { email: "demo@taskflow.local", password: "Demo123!" },
-        true,
-      );
+      await authenticate(DEMO, true);
     } finally {
       setDemoBusy(false);
     }
   }
+
   return (
     <div className="auth-page">
-      <div className="auth-brand">
-        <span className="brand-mark">
-          <CheckCheck size={23} />
+      <header className="auth-top">
+        <span className="brand">
+          <span className="brand-mark">
+            <CheckCheck size={17} strokeWidth={2.6} />
+          </span>
+          taskflow
         </span>
-        taskflow
-      </div>
+        <ThemeToggle />
+      </header>
+
       <div className="auth-grid">
-        <section>
-          <div className="auth-eyebrow">MAKE ROOM FOR WHAT MATTERS</div>
-          <h1>
-            A little focus.
-            <br />A lighter day.
-          </h1>
+        <section className="auth-intro">
+          <div className="eyebrow">Plan · Focus · Finish</div>
+          <h1>Your week, on one calm board.</h1>
           <p>
-            Bring your tasks, plans and ideas together.
-            <br />
-            One clear list. One small step at a time.
+            Drag tasks between Today, Upcoming and Done. Group them into projects and see what
+            matters at a glance.
           </p>
-          <div className="auth-preview">
-            <div>
-              <span className="mini-dot" />
-              Your day, simplified<span className="mini-date">Today</span>
-            </div>
-            <p>
-              <span className="mini-check">✓</span>Finish that one important
-              thing
-            </p>
-            <p>
-              <span className="mini-circle" />
-              Make time for yourself
-            </p>
-            <p>
-              <span className="mini-circle" />
-              Start something new
-            </p>
-            <span className="mini-progress">
-              A good day starts with a little clarity.
-            </span>
+          <div className="mini-board" aria-hidden="true">
+            {preview.map(([name, items]) => (
+              <div key={name} className="mini-column">
+                <div className="mini-head">{name}</div>
+                {items.map(([prio, title]) => (
+                  <div key={title} className={"mini-card" + (name === "Done" ? " done" : "")}>
+                    <span className={"priority-chip " + prio.toLowerCase()}>{prio}</span>
+                    <span>{title}</span>
+                    {name === "Done" && <Check size={14} strokeWidth={3} />}
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </section>
+
         <div className="auth-card">
           <h2>{register ? "Create your account" : "Welcome back"}</h2>
-          <p>
-            {register
-              ? "Your fresh start is right here."
-              : "Let’s make today a good one."}
+          <p className="text-muted-soft">
+            {register ? "It takes less than a minute." : "Log in to open your board."}
           </p>
           {error && <Alert variant="danger">{error}</Alert>}
-          <Form noValidate onSubmit={form.handleSubmit}>
+          <Form noValidate onSubmit={form.handleSubmit} className="auth-form">
             {register && (
-              <Form.Group className="mb-3" controlId="auth-name">
+              <Form.Group controlId="auth-name">
                 <Form.Label>Your name</Form.Label>
-                <Form.Control required maxLength={80} {...fieldProps("name")} />
-                <Form.Control.Feedback type="invalid">
-                  {form.errors.name}
-                </Form.Control.Feedback>
+                <Form.Control maxLength={80} {...fieldProps("name")} />
+                <Form.Control.Feedback type="invalid">{form.errors.name}</Form.Control.Feedback>
               </Form.Group>
             )}
-            <Form.Group className="mb-3" controlId="auth-email">
+            <Form.Group controlId="auth-email">
               <Form.Label>Email</Form.Label>
-              <Form.Control
-                type="email"
-                required
-                placeholder="you@example.com"
-                {...fieldProps("email")}
-              />
-              <Form.Control.Feedback type="invalid">
-                {form.errors.email}
-              </Form.Control.Feedback>
+              <Form.Control type="email" placeholder="you@example.com" {...fieldProps("email")} />
+              <Form.Control.Feedback type="invalid">{form.errors.email}</Form.Control.Feedback>
             </Form.Group>
-            <Form.Group className="mb-4" controlId="auth-password">
+            <Form.Group controlId="auth-password">
               <Form.Label>Password</Form.Label>
               <Form.Control
                 type="password"
-                required
-                minLength={8}
                 placeholder="At least 8 characters"
                 {...fieldProps("password")}
               />
@@ -140,7 +128,7 @@ export default function Auth() {
                 {form.errors.password}
               </Form.Control.Feedback>
             </Form.Group>
-            <Button className="auth-submit" type="submit" disabled={busy}>
+            <Button type="submit" className="auth-submit" disabled={busy}>
               {busy ? "Please wait…" : register ? "Create account" : "Log in"}
               <ArrowRight size={17} />
             </Button>
@@ -151,6 +139,7 @@ export default function Auth() {
           <p className="auth-switch">
             {register ? "Already have an account?" : "New to Taskflow?"}{" "}
             <button
+              className="link-button"
               disabled={busy}
               onClick={() => {
                 form.resetForm();
@@ -163,9 +152,6 @@ export default function Auth() {
           </p>
         </div>
       </div>
-      <footer className="auth-footer">
-        A personal productivity app · Built for your everyday
-      </footer>
     </div>
   );
 }

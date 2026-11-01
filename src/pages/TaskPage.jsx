@@ -1,326 +1,197 @@
 import { useSelector } from "react-redux";
-import { useParams, Link } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { Table } from "react-bootstrap";
-import {
-  ChevronRight,
-  Sun,
-  Leaf,
-  CheckCheck,
-  Check,
-  Hash,
-  CalendarDays,
-  Pencil,
-  Trash2,
-  Plus,
-} from "lucide-react";
-import { localDay, readableDate, blankTask } from "../utils/tasks";
+import { Pencil, Trash2 } from "lucide-react";
+import PageHeader from "../components/PageHeader";
+import TaskGrid from "../components/TaskGrid";
+import TaskFilters from "../components/TaskFilters";
+import { addDays, filterAndSort, localDay, readableDate } from "../utils/tasks";
 
-export default function TaskPage({
-  view,
-  onEdit,
-  onToggle,
-  onDelete,
-  query,
-  priority,
-  sort,
-  pendingIds,
-  status,
-}) {
-  const { tasks, projects } = useSelector((s) => s.app);
-  const { id } = useParams();
-  const today = localDay();
-  const project = projects.find((p) => p.id === id);
-  const titles = {
-    all: "All tasks",
-    today: "Today",
-    inbox: "Inbox",
-    upcoming: "Upcoming",
-    completed: "Completed",
-    search: "Search",
-    project: project?.name || "Project",
-  };
-  let visible = tasks;
-  if (view === "all") {
-    if (status === "active")
-      visible = visible.filter((task) => !task.completed);
-    if (status === "completed")
-      visible = visible.filter((task) => task.completed);
-  } else {
-    visible = visible.filter((task) =>
-      view === "completed" ? task.completed : !task.completed,
-    );
-  }
+const VIEWS = {
+  all: {
+    title: "All tasks",
+    eyebrow: "Manage everything in one table",
+    pick: () => true,
+    empty: ["No tasks match", "Try another search or filter."],
+    preset: () => ({}),
+  },
+  today: {
+    title: "Today",
+    eyebrow: "Due today and overdue",
+    pick: (t, today) => !t.completed && t.due_date && t.due_date <= today,
+    empty: ["A little breathing room", "Nothing is due today."],
+    preset: () => ({ due_date: localDay() }),
+  },
+  inbox: {
+    title: "Inbox",
+    eyebrow: "Tasks without a project",
+    pick: (t) => !t.completed && !t.project_id,
+    empty: ["Inbox zero", "New tasks without a project land here."],
+    preset: () => ({}),
+  },
+  upcoming: {
+    title: "Upcoming",
+    eyebrow: "Planned for later",
+    pick: (t, today) => !t.completed && t.due_date > today,
+    empty: ["Nothing planned yet", "Give a task a future date to see it here."],
+    preset: () => ({ due_date: addDays(1) }),
+  },
+  completed: {
+    title: "Completed",
+    eyebrow: "Small wins, real progress",
+    pick: (t) => t.completed,
+    empty: ["Your wins will show up here", "Tick off a task and it will appear here."],
+  },
+  search: {
+    title: "Search",
+    eyebrow: "Open tasks · use All tasks to include finished ones",
+    pick: (t) => !t.completed,
+    empty: ["No matching tasks", "Try another word or clear the filters."],
+  },
+};
+
+// Groups a list into titled sections for the Today and Upcoming pages.
+function groupTasks(view, list, today) {
   if (view === "today")
-    visible = visible.filter((t) => t.due_date && t.due_date <= today);
-  if (view === "inbox") visible = visible.filter((t) => !t.project_id);
+    return [
+      ["Overdue", list.filter((t) => t.due_date < today)],
+      ["Today", list.filter((t) => t.due_date === today)],
+    ].filter(([, items]) => items.length);
   if (view === "upcoming")
-    visible = visible.filter((t) => t.due_date && t.due_date > today);
-  if (view === "project") visible = visible.filter((t) => t.project_id === id);
-  if (query)
-    visible = visible.filter((t) =>
-      (t.title + " " + t.description)
-        .toLowerCase()
-        .includes(query.toLowerCase()),
-    );
-  if (priority)
-    visible = visible.filter((t) => t.priority === Number(priority));
-  visible = [...visible].sort((a, b) =>
-    sort === "priority"
-      ? a.priority - b.priority
-      : sort === "name"
-        ? a.title.localeCompare(b.title)
-        : (a.due_date || "9999").localeCompare(b.due_date || "9999"),
-  );
-  const overdue = visible.filter((t) => t.due_date && t.due_date < today),
-    rest = visible.filter((t) => !overdue.includes(t));
-  const groups =
-    view === "today"
-      ? [
-          ["Overdue", overdue],
-          ["Today", rest],
-        ]
-      : view === "upcoming"
-        ? [...new Set(visible.map((t) => t.due_date))].map((date) => [
-            new Date(date + "T12:00").toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            }),
-            visible.filter((t) => t.due_date === date),
-          ])
-        : [["", visible]];
-  if (view === "project" && !project)
-    return (
-      <div className="empty-state">
-        <h1>Project not found</h1>
-        <p>This project may have been deleted.</p>
-        <Link to="/inbox">Back to Inbox</Link>
-      </div>
-    );
+    return [...new Set(list.map((t) => t.due_date))].map((day) => [
+      readableDate(day, { weekday: "long", month: "long", day: "numeric" }),
+      list.filter((t) => t.due_date === day),
+    ]);
+  return null;
+}
+
+export default function TaskPage({ view }) {
+  const { taskActions, newTask, pendingIds } = useOutletContext();
+  const { tasks, projects } = useSelector((s) => s.app);
+  const ui = useSelector((s) => s.ui);
+  const config = VIEWS[view];
+  const today = localDay();
+  const searchable = view === "search" || view === "all";
+
+  let visible = tasks.filter((t) => config.pick(t, today));
+  if (view === "all" && ui.status !== "all")
+    visible = visible.filter((t) => (ui.status === "completed" ? t.completed : !t.completed));
+  visible = filterAndSort(visible, searchable ? ui : { ...ui, query: "" });
+
+  const open = tasks.filter((t) => !t.completed);
+  const groups = groupTasks(view, visible, today);
+  const [emptyTitle, emptyText] = config.empty;
+  const projectName = (task) => projects.find((p) => p.id === task.project_id)?.name || "Inbox";
+
   return (
     <>
-      <div className="page-heading">
-        <div>
-          <div className="breadcrumb">
-            My workspace <ChevronRight size={12} />
-            {titles[view]}
+      <PageHeader eyebrow={config.eyebrow} title={config.title}>
+        <span className="title-count">{visible.length}</span>
+      </PageHeader>
+
+      {view === "all" && (
+        <>
+          <div className="summary" aria-label="Task overview">
+            <div>
+              <strong>{open.length}</strong>
+              <span>To do</span>
+            </div>
+            <div>
+              <strong>{open.filter((t) => t.due_date && t.due_date < today).length}</strong>
+              <span>Overdue</span>
+            </div>
+            <div>
+              <strong>{tasks.length - open.length}</strong>
+              <span>Completed</span>
+            </div>
           </div>
-          <h1>{titles[view]}</h1>
-          <p className="page-subtitle">
-            {view === "today"
-              ? new Date().toLocaleDateString("en-US", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                })
-              : view === "upcoming"
-                ? "A little planning goes a long way."
-                : view === "completed"
-                  ? "Small wins. Real progress."
-                  : view === "inbox"
-                    ? "A home for your thoughts and to-dos."
-                    : view === "search"
-                      ? `Find what you’re looking for.`
-                      : "Keep moving, one task at a time."}
-          </p>
-        </div>
-        <div className="heading-symbol">
-          {view === "today" ? (
-            <Sun size={27} />
-          ) : view === "completed" ? (
-            <CheckCheck size={27} />
-          ) : (
-            <Leaf size={27} />
-          )}
-        </div>
-      </div>
-      {view === "today" && (
-        <div className="daily-note">
-          <span>✧</span>
-          <div>
-            <strong>You don’t have to do it all today.</strong>
-            <p>Start with what matters. The rest can wait.</p>
-          </div>
-        </div>
+          <TaskFilters showStatus idPrefix="page" />
+        </>
       )}
-      <div className="task-count">
-        {visible.length} {view === "completed" ? "completed" : "tasks"}
-      </div>
+
+      {view === "search" && !ui.query && (
+        <p className="hint">Type in the search box at the top (Ctrl K) to find a task.</p>
+      )}
+
       {view === "all" && visible.length > 0 ? (
-        <Table
-          responsive
-          hover
-          className="management-table"
-          aria-label="All tasks"
-        >
-          <thead>
-            <tr>
-              <th>Task</th>
-              <th>Due date</th>
-              <th>Priority</th>
-              <th>Project</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((task) => (
-              <tr key={task.id}>
-                <td>
-                  <Link to={"/task/" + task.id}>{task.title}</Link>
-                </td>
-                <td>{task.due_date || "—"}</td>
-                <td>P{task.priority}</td>
-                <td>
-                  {projects.find((p) => p.id === task.project_id)?.name ||
-                    "Inbox"}
-                </td>
-                <td>
-                  <button
-                    className={"status-badge " + (task.completed ? "done" : "")}
-                    disabled={pendingIds.includes(task.id)}
-                    onClick={() => onToggle(task)}
-                    aria-label={
-                      (task.completed ? "Reopen " : "Complete ") + task.title
-                    }
-                  >
-                    {task.completed ? "Completed" : "To do"}
-                  </button>
-                </td>
-                <td>
-                  <div className="table-actions">
-                    <button
-                      aria-label={"Edit " + task.title}
-                      onClick={() => onEdit(task)}
-                    >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      aria-label={"Delete " + task.title}
-                      onClick={() => onDelete(task)}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
+        <div className="table-card">
+          <Table responsive hover className="management-table" aria-label="All tasks">
+            <thead>
+              <tr>
+                <th>Task</th>
+                <th>Due date</th>
+                <th>Priority</th>
+                <th>Project</th>
+                <th>Status</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </Table>
-      ) : (
-        groups.map(
-          ([title, list]) =>
-            list.length > 0 && (
-              <section className="task-group" key={title}>
-                {title && (
-                  <div
-                    className={
-                      "group-title " + (title === "Overdue" ? "overdue" : "")
-                    }
-                  >
-                    {title}
-                    <span>{list.length}</span>
-                  </div>
-                )}
-                {list.map((task) => (
-                  <div
-                    className={"task-row " + (task.completed ? "is-done" : "")}
-                    key={task.id}
-                  >
+            </thead>
+            <tbody>
+              {visible.map((task) => (
+                <tr key={task.id}>
+                  <td>
+                    <Link to={"/task/" + task.id}>{task.title}</Link>
+                  </td>
+                  <td>{task.due_date || "—"}</td>
+                  <td>
+                    <span className={"priority-chip p" + task.priority}>P{task.priority}</span>
+                  </td>
+                  <td>{projectName(task)}</td>
+                  <td>
                     <button
-                      className={"task-circle p" + task.priority}
-                      aria-label={
-                        (task.completed ? "Reopen " : "Complete ") + task.title
-                      }
+                      className={"status-badge" + (task.completed ? " done" : "")}
                       disabled={pendingIds.includes(task.id)}
-                      onClick={() => onToggle(task)}
+                      onClick={() => taskActions.onToggle(task)}
+                      aria-label={(task.completed ? "Reopen " : "Complete ") + task.title}
                     >
-                      {task.completed && <Check size={13} />}
+                      {task.completed ? "Completed" : "To do"}
                     </button>
-                    <Link className="task-content" to={"/task/" + task.id}>
-                      <span className="task-title">{task.title}</span>
-                      {task.description && (
-                        <span className="task-description">
-                          {task.description}
-                        </span>
-                      )}
-                      <span className="task-meta">
-                        {task.due_date && (
-                          <span
-                            className={
-                              task.due_date < today
-                                ? "overdue"
-                                : task.due_date === today
-                                  ? "today-tag"
-                                  : ""
-                            }
-                          >
-                            <CalendarDays size={12} />
-                            {task.due_date === today
-                              ? "Today"
-                              : readableDate(task.due_date)}
-                          </span>
-                        )}
-                        <span>
-                          <Hash size={12} />
-                          {projects.find((p) => p.id === task.project_id)
-                            ?.name || "Inbox"}
-                        </span>
-                      </span>
-                    </Link>
-                    <div className="task-actions">
+                  </td>
+                  <td>
+                    <div className="table-actions">
                       <button
+                        className="icon-button small"
                         aria-label={"Edit " + task.title}
-                        onClick={() => onEdit(task)}
+                        onClick={() => taskActions.onEdit(task)}
                       >
                         <Pencil size={15} />
                       </button>
                       <button
+                        className="icon-button small"
                         aria-label={"Delete " + task.title}
-                        onClick={() => onDelete(task)}
+                        onClick={() => taskActions.onDelete(task)}
                       >
                         <Trash2 size={15} />
                       </button>
                     </div>
-                  </div>
-                ))}
-              </section>
-            ),
-        )
-      )}
-      {!visible.length && (
-        <div className="empty-state">
-          <div className="empty-art">
-            <CheckCheck size={45} />
-          </div>
-          <h3>
-            {view === "completed"
-              ? "Your wins will show up here"
-              : "A little breathing room"}
-          </h3>
-          <p>
-            {view === "search" ||
-            query ||
-            priority ||
-            (view === "all" && status !== "all")
-              ? "Try another search or filter."
-              : "Add a task when you’re ready. You’ve got this."}
-          </p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
         </div>
+      ) : groups && groups.length ? (
+        groups.map(([title, list]) => (
+          <section key={title} className="date-group">
+            <h2 className={title === "Overdue" ? "overdue" : ""}>
+              {title}
+              <span className="count">{list.length}</span>
+            </h2>
+            <TaskGrid tasks={list} actions={taskActions} />
+          </section>
+        ))
+      ) : (
+        <TaskGrid
+          tasks={visible}
+          actions={taskActions}
+          emptyTitle={emptyTitle}
+          emptyText={emptyText}
+        />
       )}
-      {view !== "completed" && (
-        <button
-          className="inline-add"
-          onClick={() =>
-            onEdit({
-              ...blankTask,
-              due_date: view === "today" ? today : "",
-              project_id: view === "project" ? id : "",
-            })
-          }
-        >
-          <Plus size={18} />
-          Add task
+
+      {config.preset && (
+        <button className="column-add wide" onClick={() => newTask(config.preset())}>
+          + Add task
         </button>
       )}
     </>

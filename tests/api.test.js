@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-test("JWT, user isolation, tasks CRUD and SQLite persistence", async () => {
+test("JWT, user isolation, tasks and projects CRUD, SQLite persistence", async () => {
   const dir = mkdtempSync(join(tmpdir(), "taskflow-test-"));
   const base = "http://localhost:3099/api";
   let child;
@@ -79,6 +79,31 @@ test("JWT, user isolation, tasks CRUD and SQLite persistence", async () => {
         token,
       )
     ).json();
+    const renamed = await request(
+      "/projects/" + project.id,
+      "PATCH",
+      { name: "Renamed project", color: "#45a478" },
+      token,
+    );
+    assert.equal(renamed.status, 200);
+    assert.equal((await renamed.json()).name, "Renamed project");
+    assert.equal(
+      (
+        await request(
+          "/projects/" + project.id,
+          "PATCH",
+          { name: "Not mine" },
+          other.token,
+        )
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await request("/projects/" + project.id, "PATCH", { name: " " }, token)
+      ).status,
+      400,
+    );
     const task = await (
       await request(
         "/tasks",
