@@ -1,6 +1,6 @@
-# Taskflow — Todoist-inspired To-Do App
+# Taskflow — To-Do Board App
 
-Ứng dụng To-Do đơn giản, lấy cảm hứng từ bố cục Todoist: sidebar màu kem, danh sách công việc, nút Add task màu đỏ và các trang Inbox / Today / Upcoming / Completed. Đây là app độc lập dùng dữ liệu của riêng bạn, không kết nối tài khoản Todoist.
+Ứng dụng quản lý công việc dạng board: các cột Today / Upcoming / No date / Done, kéo thả task giữa các cột, nhóm task theo project, giao diện tối (dark mode) có thể chuyển sang sáng. Frontend React + Redux, backend Express + SQLite, đăng nhập bằng JWT.
 
 ## Chạy trong VS Code trên Windows
 
@@ -17,7 +17,7 @@ npm run dev
 Nếu PowerShell chặn npm, dùng `npm.cmd install` và `npm.cmd run dev`.
 
 4. Mở `http://localhost:5173`. Một lệnh dev chạy cả frontend và backend.
-5. Bấm **Explore the demo workspace**, hoặc đăng ký tài khoản riêng.
+5. Bấm **Explore the demo workspace** (nút mặt trời ở góc trên để chuyển giao diện sáng), hoặc đăng ký tài khoản riêng.
 
 Tài khoản demo: `demo@taskflow.local` / `Demo123!`.
 
@@ -34,15 +34,16 @@ Nếu chưa tạo `.env.local`, backend vẫn chạy được ở chế độ de
 
 - Đăng ký, đăng nhập, đăng xuất; mật khẩu được hash bằng scrypt.
 - JWT tạo và kiểm tra bằng thư viện `jsonwebtoken` (HS256, hết hạn sau 1 ngày); Axios tự gửi token trong `Authorization: Bearer`; middleware backend chặn mọi API khi token sai hoặc hết hạn.
-- Mỗi tài khoản có danh sách và dự án riêng.
-- Thêm/sửa/xóa công việc, mô tả, hạn hoàn thành, priority 1–4, chuyển dự án.
-- Tick hoàn thành hoặc mở lại task trong Completed.
-- Inbox: công việc chưa gán dự án. Today: việc hôm nay và quá hạn. Upcoming: việc có ngày trong tương lai.
-- Tìm kiếm theo tên/mô tả, lọc priority, sắp xếp tên/ưu tiên/ngày.
-- Ctrl+K (Windows) hoặc Cmd+K (Mac) mở tìm kiếm.
-- Thêm/xóa dự án; xóa dự án chuyển công việc của nó về Inbox.
+- Mỗi tài khoản có task và project riêng; user khác không xem/sửa được.
+- **Board** dạng cột: Today (gồm cả việc quá hạn) · Upcoming · No date · Done.
+- **Kéo thả** task giữa các cột: thả vào Today → hạn hôm nay; Upcoming → hạn ngày mai (nếu chưa có ngày tương lai); No date → bỏ hạn; Done → hoàn thành.
+- Thêm/sửa/xóa task: tiêu đề, mô tả, hạn, priority 1–4, project. Tick để hoàn thành hoặc mở lại.
+- **Project đủ CRUD**: thêm, xem board riêng của project, **đổi tên/đổi màu**, xóa (task của project bị xóa chuyển về Inbox).
+- Trang Inbox (task chưa có project), Upcoming (nhóm theo ngày), Completed, Search.
+- Tìm kiếm theo tên/mô tả (Ctrl+K / Cmd+K), lọc priority, sắp xếp theo ngày/priority/tên.
+- **Dark mode / light mode**: nút mặt trời/mặt trăng ở thanh trên cùng và trang đăng nhập; lựa chọn được nhớ sau khi tải lại trang.
 - SQLite lưu vào `data/tasks.db`; tắt app hoặc F5 vẫn còn dữ liệu.
-- Responsive: điện thoại mở sidebar bằng nút menu.
+- Responsive: trên điện thoại thanh menu và ô tìm kiếm tự xuống dòng, các cột xếp dọc.
 
 ## Đối chiếu yêu cầu môn học
 
@@ -50,27 +51,44 @@ Nếu chưa tạo `.env.local`, backend vẫn chạy được ở chế độ de
 | --- | --- |
 | Vite | vite.config.js, scripts dev/build |
 | React mới nhất (19.3) | package.json / package-lock.json |
-| Thư viện UI | React Bootstrap: Modal, Button, Form, Alert, Spinner |
-| React Router mới nhất (v8, package `react-router`) | src/main.jsx: BrowserRouter; src/App.jsx: Routes, Route, NavLink, Navigate, useParams |
-| Axios gọi HTTP API | src/api.js (instance + interceptor), được gọi trong các thunk ở src/store.js |
+| Thư viện UI | React Bootstrap: Modal, Form, Button, Alert, Spinner, Dropdown, ToggleButtonGroup, Toast; dark mode dùng color mode `data-bs-theme` của Bootstrap 5.3 |
+| React Router mới nhất (v8, package `react-router`) | src/main.jsx: BrowserRouter; src/App.jsx: Routes, Route lồng nhau, Navigate; Outlet + useOutletContext, NavLink, useParams |
+| Axios gọi HTTP API | src/api.js (instance + interceptor), được gọi trong các thunk ở src/store/workspaceSlice.js |
 | API URL trong .env với VITE_API_URL | .env, import.meta.env.VITE_API_URL |
-| Redux quản lý state dùng chung | src/store.js: Redux Toolkit slice + createAsyncThunk cho login/register, tải dữ liệu, thêm/sửa/xóa task và project |
-| RESTful API | server/index.js: /api/tasks, /api/projects, /api/auth |
+| Redux quản lý state dùng chung | src/store: `workspaceSlice` (user, task, project + createAsyncThunk cho mọi thao tác API) và `uiSlice` (theme, từ khóa tìm kiếm, lọc, sắp xếp) |
+| RESTful API | server/index.js: GET/POST/PATCH/DELETE `/api/tasks`, GET/POST/PATCH/DELETE `/api/projects`, `/api/auth` |
 | Database kết nối backend | node:sqlite, data/tasks.db |
 | JWT frontend và backend | jsonwebtoken ở server, middleware bảo vệ /api, token gửi qua Axios interceptor |
 
 Phiên bản được ghi rõ trong package.json và khóa trong package-lock.json. Dùng `npm ci` để cài đúng bản đã kiểm tra.
 
-## Cấu trúc code và cách học
+## Cấu trúc code
 
-- `src/main.jsx`: Provider của Redux và BrowserRouter.
-- `src/store.js`: state dùng chung; các thao tác gọi API là async thunk, reducer cập nhật state sau khi API trả về.
-- `src/api.js`: Axios instance đọc base URL từ .env, gửi token tự động.
-- `src/App.jsx`: trang đăng nhập, sidebar, các trang task, form và modal.
-- `src/styles.css`: giao diện và responsive.
-- `server/index.js`: Express API, JWT, SQLite, dữ liệu mẫu.
+```
+src/
+  main.jsx              Provider (Redux) + BrowserRouter
+  App.jsx               Khai báo route, áp dụng theme
+  api.js                Axios instance + interceptor gửi token
+  store/
+    index.js            configureStore
+    workspaceSlice.js   user, tasks, projects + async thunks gọi API
+    uiSlice.js          theme, search, filter, sort
+  utils/tasks.js        xử lý ngày, lọc/sắp xếp, định nghĩa các cột board
+  pages/
+    LoginPage.jsx       đăng nhập / đăng ký
+    Workspace.jsx       khung chung: TopBar, modal, toast (Outlet)
+    BoardPage.jsx       board chính và board của từng project
+    ListPage.jsx        Inbox, Upcoming, Completed, Search
+  components/
+    TopBar.jsx, ThemeToggle.jsx, PageHeader.jsx, ProjectBar.jsx
+    BoardColumn.jsx, TaskCard.jsx, TaskGrid.jsx
+    TaskEditor.jsx, ProjectEditor.jsx, ConfirmDialog.jsx
+  styles.css            biến màu cho dark/light và giao diện
+server/index.js         Express API, JWT, SQLite, dữ liệu mẫu
+tests/                  api.test.js (Node test), ui.spec.js (Playwright)
+```
 
-ES6 dùng trong bài: import/export, const/let, arrow functions, destructuring, spread operator, template literals, map/filter, async/await. `useState` giữ dữ liệu form; Redux giữ dữ liệu chia sẻ giữa các trang; `useEffect` tải dữ liệu.
+ES6 dùng trong bài: import/export, const/let, arrow functions, destructuring, spread operator, template literals, map/filter, async/await. `useState` giữ dữ liệu form; Redux giữ dữ liệu chia sẻ giữa các trang; `useEffect` tải dữ liệu và gắn phím tắt.
 
 ## Kiểm tra
 
@@ -79,7 +97,9 @@ npm run build
 npm test
 ```
 
-Test API kiểm tra đăng nhập, JWT, phân quyền tài khoản, CRUD và dữ liệu còn sau khi restart backend.
+Test API kiểm tra đăng nhập, JWT, phân quyền tài khoản, CRUD task và project (gồm đổi tên project) và dữ liệu còn sau khi restart backend.
+
+Test giao diện (Playwright) có 3 kịch bản: thêm/sửa/kéo thả/hoàn thành/mở lại/xóa task; tạo/đổi tên/xóa project; bật tắt dark mode và chạy trên màn hình điện thoại.
 
 Test giao diện (lần đầu cần tải trình duyệt):
 

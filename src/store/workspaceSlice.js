@@ -1,10 +1,5 @@
-import {
-  configureStore,
-  createSlice,
-  createAsyncThunk,
-  isAnyOf,
-} from "@reduxjs/toolkit";
-import { api, errorText } from "./api";
+import { createSlice, createAsyncThunk, isAnyOf } from "@reduxjs/toolkit";
+import { api, errorText } from "../api";
 
 const TOKEN_KEY = "taskflow-token";
 
@@ -18,7 +13,7 @@ const apiThunk = (type, request) =>
     }
   });
 
-// ---- Auth ----
+// Auth
 export const login = apiThunk("auth/login", async (credentials) => {
   const { data } = await api.post("/auth/login", credentials);
   return data;
@@ -28,7 +23,7 @@ export const register = apiThunk("auth/register", async (fields) => {
   return data;
 });
 
-// ---- Workspace (tasks + projects + current user) ----
+// Tasks, projects and the current user in one request batch
 export const loadWorkspace = apiThunk("workspace/load", async () => {
   const [tasks, projects, user] = await Promise.all([
     api.get("/tasks"),
@@ -38,7 +33,7 @@ export const loadWorkspace = apiThunk("workspace/load", async () => {
   return { tasks: tasks.data, projects: projects.data, user: user.data };
 });
 
-// ---- Tasks ----
+// Tasks: saveTask creates when there is no id, otherwise sends a partial PATCH
 export const saveTask = apiThunk("tasks/save", async ({ id, ...body }) => {
   const { data } = id
     ? await api.patch(`/tasks/${id}`, body)
@@ -56,11 +51,16 @@ export const deleteTask = apiThunk("tasks/delete", async (id) => {
   return id;
 });
 
-// ---- Projects ----
-export const addProject = apiThunk("projects/add", async (project) => {
-  const { data } = await api.post("/projects", project);
-  return data;
-});
+// Projects
+export const saveProject = apiThunk(
+  "projects/save",
+  async ({ id, ...body }) => {
+    const { data } = id
+      ? await api.patch(`/projects/${id}`, body)
+      : await api.post("/projects", body);
+    return data;
+  },
+);
 export const deleteProject = apiThunk("projects/delete", async (id) => {
   await api.delete(`/projects/${id}`);
   return id;
@@ -73,8 +73,14 @@ const signIn = (state, { payload }) => {
   state.error = "";
 };
 
-const slice = createSlice({
-  name: "app",
+const upsert = (list, item) => {
+  const index = list.findIndex((x) => x.id === item.id);
+  if (index === -1) list.push(item);
+  else list[index] = item;
+};
+
+const workspaceSlice = createSlice({
+  name: "workspace",
   initialState: {
     token: localStorage.getItem(TOKEN_KEY) || "",
     user: null,
@@ -90,9 +96,6 @@ const slice = createSlice({
       state.user = null;
       state.tasks = [];
       state.projects = [];
-      state.error = "";
-    },
-    clearError(state) {
       state.error = "";
     },
   },
@@ -115,25 +118,21 @@ const slice = createSlice({
       .addCase(deleteTask.fulfilled, (state, { payload: id }) => {
         state.tasks = state.tasks.filter((t) => t.id !== id);
       })
-      .addCase(addProject.fulfilled, (state, { payload }) => {
-        state.projects.push(payload);
+      .addCase(saveProject.fulfilled, (state, { payload }) => {
+        upsert(state.projects, payload);
       })
       .addCase(deleteProject.fulfilled, (state, { payload: id }) => {
         state.projects = state.projects.filter((p) => p.id !== id);
-        // Same as the backend: tasks of a deleted project move to Inbox.
+        // Same rule as the backend: tasks of a deleted project move to Inbox.
         state.tasks.forEach((t) => {
           if (t.project_id === id) t.project_id = null;
         });
       })
       .addMatcher(
         isAnyOf(saveTask.fulfilled, toggleTask.fulfilled),
-        (state, { payload }) => {
-          const index = state.tasks.findIndex((t) => t.id === payload.id);
-          if (index === -1) state.tasks.push(payload);
-          else state.tasks[index] = payload;
-        },
+        (state, { payload }) => upsert(state.tasks, payload),
       ),
 });
 
-export const { signedOut, clearError } = slice.actions;
-export const store = configureStore({ reducer: { app: slice.reducer } });
+export const { signedOut } = workspaceSlice.actions;
+export default workspaceSlice.reducer;

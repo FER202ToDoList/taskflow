@@ -319,25 +319,38 @@ app.get("/api/projects", (req, res) =>
     db.prepare("SELECT * FROM projects WHERE user_id=?").all(req.userId),
   ),
 );
+const validProject = ({ name, color }) =>
+  typeof name === "string" &&
+  name.trim() &&
+  name.length <= 60 &&
+  typeof color === "string" &&
+  /^#[0-9a-f]{6}$/i.test(color);
+const projectError = { message: "Enter a project name and valid color." };
 app.post("/api/projects", (req, res) => {
-  const { name, color = "#4073d6" } = req.body || {};
-  if (
-    typeof name !== "string" ||
-    !name.trim() ||
-    name.length > 60 ||
-    !/^#[0-9a-f]{6}$/i.test(color)
-  )
-    return res
-      .status(400)
-      .json({ message: "Enter a project name and valid color." });
+  const body = { color: "#4073d6", ...req.body };
+  if (!validProject(body)) return res.status(400).json(projectError);
   const id = randomUUID();
   db.prepare("INSERT INTO projects VALUES(?,?,?,?)").run(
     id,
     req.userId,
-    name.trim(),
-    color,
+    body.name.trim(),
+    body.color,
   );
   res.status(201).json(db.prepare("SELECT * FROM projects WHERE id=?").get(id));
+});
+app.patch("/api/projects/:id", (req, res) => {
+  const old = db
+    .prepare("SELECT * FROM projects WHERE id=? AND user_id=?")
+    .get(req.params.id, req.userId);
+  if (!old) return res.status(404).json({ message: "Project not found." });
+  const body = { name: old.name, color: old.color, ...req.body };
+  if (!validProject(body)) return res.status(400).json(projectError);
+  db.prepare("UPDATE projects SET name=?, color=? WHERE id=?").run(
+    body.name.trim(),
+    body.color,
+    old.id,
+  );
+  res.json(db.prepare("SELECT * FROM projects WHERE id=?").get(old.id));
 });
 app.delete("/api/projects/:id", (req, res) => {
   const r = db
