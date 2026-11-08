@@ -5,6 +5,7 @@ import {
   isAnyOf,
 } from "@reduxjs/toolkit";
 import { api, errorText } from "./api";
+import { userFromApi, taskFromApi, taskToApi } from "./api-models";
 
 const TOKEN_KEY = "taskflow-token";
 const THEME_KEY = "taskflow-theme";
@@ -22,11 +23,25 @@ const apiThunk = (type, request) =>
 // ---- Auth ----
 export const login = apiThunk("auth/login", async (credentials) => {
   const { data } = await api.post("/auth/login", credentials);
-  return data;
+  const profile = await api.get("/auth/me", {
+    headers: { Authorization: `Bearer ${data.token}` },
+  });
+  return { ...data, user: userFromApi(profile.data) };
 });
 export const register = apiThunk("auth/register", async (fields) => {
-  const { data } = await api.post("/auth/register", fields);
-  return data;
+  await api.post("/auth/register", {
+    fullName: fields.name,
+    email: fields.email,
+    password: fields.password,
+  });
+  const { data } = await api.post("/auth/login", {
+    email: fields.email,
+    password: fields.password,
+  });
+  const profile = await api.get("/auth/me", {
+    headers: { Authorization: `Bearer ${data.token}` },
+  });
+  return { ...data, user: userFromApi(profile.data) };
 });
 
 // ---- Workspace (tasks + projects + current user) ----
@@ -36,22 +51,26 @@ export const loadWorkspace = apiThunk("workspace/load", async () => {
     api.get("/projects"),
     api.get("/auth/me"),
   ]);
-  return { tasks: tasks.data, projects: projects.data, user: user.data };
+  return {
+    tasks: tasks.data.map(taskFromApi),
+    projects: projects.data,
+    user: userFromApi(user.data),
+  };
 });
 
 // ---- Tasks ----
 // saveTask creates a task when there is no id, otherwise sends a (partial) PATCH.
 export const saveTask = apiThunk("tasks/save", async ({ id, ...body }) => {
   const { data } = id
-    ? await api.patch(`/tasks/${id}`, body)
-    : await api.post("/tasks", body);
-  return data;
+    ? await api.patch(`/tasks/${id}`, taskToApi(body))
+    : await api.post("/tasks", taskToApi(body));
+  return taskFromApi(data);
 });
 export const toggleTask = apiThunk("tasks/toggle", async (task) => {
   const { data } = await api.patch(`/tasks/${task.id}`, {
-    completed: !task.completed,
+    isCompleted: !task.completed,
   });
-  return data;
+  return taskFromApi(data);
 });
 export const deleteTask = apiThunk("tasks/delete", async (id) => {
   await api.delete(`/tasks/${id}`);
@@ -60,12 +79,15 @@ export const deleteTask = apiThunk("tasks/delete", async (id) => {
 
 // ---- Projects ----
 // saveProject creates a project when there is no id, otherwise renames/recolours it.
-export const saveProject = apiThunk("projects/save", async ({ id, ...body }) => {
-  const { data } = id
-    ? await api.patch(`/projects/${id}`, body)
-    : await api.post("/projects", body);
-  return data;
-});
+export const saveProject = apiThunk(
+  "projects/save",
+  async ({ id, ...body }) => {
+    const { data } = id
+      ? await api.patch(`/projects/${id}`, body)
+      : await api.post("/projects", body);
+    return data;
+  },
+);
 export const deleteProject = apiThunk("projects/delete", async (id) => {
   await api.delete(`/projects/${id}`);
   return id;
@@ -75,6 +97,7 @@ const signIn = (state, { payload }) => {
   localStorage.setItem(TOKEN_KEY, payload.token);
   state.token = payload.token;
   state.user = payload.user;
+  state.showOnboarding = payload.showOnboarding === true;
   state.error = "";
 };
 
@@ -96,7 +119,11 @@ const slice = createSlice({
     error: "",
   },
   reducers: {
+    onboardingSeen(state) {
+      state.showOnboarding = false;
+    },
     signedOut(state) {
+      state.showOnboarding = false;
       localStorage.removeItem(TOKEN_KEY);
       state.token = "";
       state.user = null;
@@ -185,7 +212,7 @@ const uiSlice = createSlice({
   },
 });
 
-export const { signedOut, clearError } = slice.actions;
+export const { signedOut, clearError, onboardingSeen } = slice.actions;
 export const { toggleTheme, setQuery, setStatus, setPriority, setSort } =
   uiSlice.actions;
 export const store = configureStore({

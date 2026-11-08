@@ -3,10 +3,18 @@ import { mkdirSync } from "node:fs";
 
 mkdirSync("screenshots", { recursive: true });
 
-const demoLogin = async (page) => {
-  await page.goto("/login");
-  await page.getByRole("button", { name: "Explore the demo workspace" }).click();
-  await expect(page.getByRole("heading", { name: "Your board" })).toBeVisible();
+const signUp = async (page) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Sign up', exact: true }).click();
+  const email = `browser-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
+  await page.getByLabel('Your name').fill('Browser Test');
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Password', { exact: true }).fill('Student123!');
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Bỏ qua', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Your board', exact: true })).toBeVisible();
+  return email;
 };
 
 test("Board: add, edit, drag, complete, reopen and delete a task", async ({ page }) => {
@@ -15,9 +23,9 @@ test("Board: add, edit, drag, complete, reopen and delete a task", async ({ page
   await page.setViewportSize({ width: 1440, height: 980 });
   await page.goto("/login");
   await page.screenshot({ path: "screenshots/login.png" });
-  await demoLogin(page);
+  await signUp(page);
   const column = (name) => page.getByRole("region", { name, exact: true });
-  await expect(column("Today").getByText("Finish the React assignment")).toBeVisible();
+  await expect(column("Today").getByText("Drop a task here")).toBeVisible();
   await page.screenshot({ path: "screenshots/board.png", fullPage: true });
 
   const title = "E2E task " + Date.now();
@@ -70,7 +78,14 @@ test("Register, validate forms, manage projects, search, filter, and inspect tas
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill("Student123!");
   await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await page.getByRole("button", { name: "Bỏ qua", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Your board" })).toBeVisible();
+
+  // Create a second real project to test moving tasks; no seeded projects.
+  await page.getByRole('button', {name:'Add project',exact:true}).click();
+  await dialog.getByLabel('Project name').fill('Work');
+  await dialog.getByRole('button', {name:'Add project',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Work',exact:true})).toBeVisible();
 
   // Project: validation, create, rename
   await page.getByRole("button", { name: "Add project", exact: true }).click();
@@ -122,7 +137,7 @@ test("Register, validate forms, manage projects, search, filter, and inspect tas
   // All tasks table: sort, search, filter, status
   await page.getByRole("navigation", { name: "Views" }).getByRole("link", { name: /^All tasks/ }).click();
   await page.locator("#page-sort").selectOption("name");
-  await expect(page.getByRole("row").nth(1)).toContainText("Buy groceries");
+  await expect(page.getByRole("row").nth(1)).toContainText(title);
   await page.screenshot({ path: "screenshots/management.png", fullPage: true });
   await page.getByRole("textbox", { name: "Search tasks" }).fill(title);
   const row = page.getByRole("row").filter({ hasText: title });
@@ -170,8 +185,8 @@ test("Register, validate forms, manage projects, search, filter, and inspect tas
 });
 
 test("Expired sessions return to login and API errors keep form values", async ({ page }) => {
-  await demoLogin(page);
-  await page.route("**/api/tasks", (route) =>
+  await signUp(page);
+  await page.route("**/tasks", (route) =>
     route.request().method() === "POST"
       ? route.fulfill({ status: 500, json: { message: "Unable to save. Try again." } })
       : route.continue(),
@@ -183,7 +198,7 @@ test("Expired sessions return to login and API errors keep form values", async (
   await expect(dialog.getByRole("alert")).toHaveText("Unable to save. Try again.");
   await expect(dialog.getByLabel("Task title")).toHaveValue("Unsaved task");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.unroute("**/api/tasks");
+  await page.unroute("**/tasks");
   await page.evaluate(() => localStorage.setItem("taskflow-token", "expired-token"));
   await page.reload();
   await expect(page.getByRole("heading", { name: "Welcome back", exact: true })).toBeVisible();
@@ -198,7 +213,7 @@ test("Dark mode toggle is remembered and works on mobile", async ({ page }) => {
   await expect(html).toHaveAttribute("data-bs-theme", "dark");
   await page.getByRole("button", { name: "Switch to light mode" }).click();
   await expect(html).toHaveAttribute("data-bs-theme", "light");
-  await page.getByRole("button", { name: "Explore the demo workspace" }).click();
+  await signUp(page);
   await expect(page.getByRole("heading", { name: "Your board" })).toBeVisible();
   await page.reload();
   await expect(html).toHaveAttribute("data-bs-theme", "light");
@@ -209,7 +224,44 @@ test("Dark mode toggle is remembered and works on mobile", async ({ page }) => {
   ).toBe(true);
   await page.getByRole("link", { name: /^Upcoming/ }).click();
   await expect(page.getByRole("heading", { name: "Upcoming" })).toBeVisible();
-  await expect(page.getByText("Prepare tomorrow’s presentation", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Upcoming", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await expect(html).toHaveAttribute("data-bs-theme", "dark");
+});
+
+
+test('First-login guide appears once across reloads and new browser contexts, with manual replay', async ({page, browser}, testInfo) => {
+  const email = await signUp(page);
+  await page.reload();
+  await expect(page.getByRole('heading', {name:'Your board',exact:true})).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button',{name:'Account menu'}).click();
+  await page.getByRole('button',{name:'Hướng dẫn sử dụng'}).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCSS('opacity', '1');
+  await page.screenshot({path:'screenshots/guide-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'screenshots/guide-mobile.png',fullPage:true});
+  for(let i=0;i<5;i++) await page.getByRole('button',{name:'Tiếp',exact:true}).click();
+  await page.getByRole('button',{name:'Hoàn tất',exact:true}).click();
+  const secondBrowser = await browser.browserType().launch(testInfo.project.use.launchOptions || {});
+  const other=await secondBrowser.newContext({ baseURL: testInfo.project.use.baseURL }); const tab=await other.newPage();
+  try {
+    await tab.goto('/login');await tab.getByLabel('Email',{exact:true}).fill(email);await tab.getByLabel('Password',{exact:true}).fill('Student123!');await tab.getByRole('button',{name:'Log in',exact:true}).click();
+    await expect(tab.getByRole('heading',{name:'Your board',exact:true})).toBeVisible();await expect(tab.getByRole('dialog')).toHaveCount(0);
+  } finally { await secondBrowser.close(); }
+});
+
+test('Password recovery email link opens the reset form and invalidates the old session', async ({page, request}) => {
+  const email=await signUp(page);
+  await page.getByRole('button',{name:'Account menu'}).click();await page.getByRole('button',{name:'Log out'}).click();
+  await page.getByRole('link',{name:'Forgot password?'}).click();
+  await page.getByLabel('Email',{exact:true}).fill(email);await page.getByRole('button',{name:'Send reset link'}).click();
+  await expect(page.getByRole('status')).toContainText('If an account exists');
+  const response=await request.get(`http://127.0.0.1:3101/__test/reset-token?email=${encodeURIComponent(email)}`);const {token}=await response.json();
+  await page.goto(`/reset-password?token=${token}`);
+  await page.getByLabel('New password',{exact:true}).fill('Changed123!');await page.getByLabel('Confirm password').fill('Changed123!');await page.getByRole('button',{name:'Save password'}).click();
+  await expect(page.getByRole('status')).toContainText('Password updated');
+  await page.getByRole('link',{name:'Back to log in'}).click();await page.getByLabel('Email',{exact:true}).fill(email);await page.getByLabel('Password',{exact:true}).fill('Changed123!');await page.getByRole('button',{name:'Log in',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'Your board',exact:true})).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
 });

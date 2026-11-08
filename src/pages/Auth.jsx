@@ -1,14 +1,12 @@
 import { useState } from "react";
 import { useDispatch } from "react-redux";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { Form, Button, Alert } from "react-bootstrap";
 import { ArrowRight, Check, CheckCheck } from "lucide-react";
 import { useFormik } from "formik";
 import { authSchema } from "../utils/validation";
 import { login, register as registerUser } from "../store";
 import ThemeToggle from "../components/ThemeToggle";
-
-const DEMO = { email: "demo@taskflow.local", password: "Demo123!" };
 
 // Small static board shown next to the form.
 const preview = [
@@ -19,16 +17,15 @@ const preview = [
 
 export default function Auth() {
   const [register, setRegister] = useState(false);
-  const [demoBusy, setDemoBusy] = useState(false);
   const [error, setError] = useState("");
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  async function authenticate(values, demo = false) {
+  async function authenticate(values) {
     setError("");
     try {
       const action =
-        register && !demo
+        register
           ? registerUser({ ...values, name: values.name.trim(), email: values.email.trim() })
           : login({ email: values.email.trim(), password: values.password });
       await dispatch(action).unwrap();
@@ -43,7 +40,7 @@ export default function Auth() {
     validationSchema: authSchema(register),
     onSubmit: (values) => authenticate(values),
   });
-  const busy = demoBusy || form.isSubmitting;
+  const busy = form.isSubmitting;
   const fieldProps = (name) => ({
     name,
     value: form.values[name],
@@ -52,15 +49,6 @@ export default function Auth() {
     disabled: busy,
     isInvalid: Boolean(form.touched[name] && form.errors[name]),
   });
-
-  async function demoLogin() {
-    setDemoBusy(true);
-    try {
-      await authenticate(DEMO, true);
-    } finally {
-      setDemoBusy(false);
-    }
-  }
 
   return (
     <div className="auth-page">
@@ -133,9 +121,7 @@ export default function Auth() {
               <ArrowRight size={17} />
             </Button>
           </Form>
-          <button className="demo-button" disabled={busy} onClick={demoLogin}>
-            Explore the demo workspace
-          </button>
+          {!register && <Link to="/forgot-password">Forgot password?</Link>}
           <p className="auth-switch">
             {register ? "Already have an account?" : "New to Taskflow?"}{" "}
             <button

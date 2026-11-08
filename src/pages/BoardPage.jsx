@@ -61,7 +61,7 @@ export default function BoardPage() {
         )}
       </PageHeader>
       <p className="hint">Tip: drag a card to another column to reschedule or finish it.</p>
-      <div className="board">
+      <div className="board" data-tour="board">
         {boardColumns.map((column) => (
           <BoardColumn
             key={column.id}

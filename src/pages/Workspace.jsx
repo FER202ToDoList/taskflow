@@ -3,11 +3,19 @@ import { useDispatch, useSelector } from "react-redux";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { Alert, Spinner, Toast, ToastContainer } from "react-bootstrap";
 import { Check, X } from "lucide-react";
-import { deleteProject, deleteTask, loadWorkspace, saveTask, toggleTask } from "../store";
+import {
+  deleteProject,
+  deleteTask,
+  loadWorkspace,
+  saveTask,
+  toggleTask,
+  onboardingSeen,
+} from "../store";
 import { blankTask, localDay } from "../utils/tasks";
 import TopBar from "../components/TopBar";
 import TaskEditor from "../components/TaskEditor";
 import ProjectEditor from "../components/ProjectEditor";
+import UsageGuide from "../components/UsageGuide";
 import ConfirmDialog from "../components/ConfirmDialog";
 
 // Shared layout for every signed-in page: top bar, dialogs and notifications.
@@ -16,7 +24,7 @@ export default function Workspace() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, error } = useSelector((s) => s.app);
+  const { user, error, showOnboarding } = useSelector((s) => s.app);
   const [taskDraft, setTaskDraft] = useState(null);
   const [projectDraft, setProjectDraft] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -24,6 +32,14 @@ export default function Workspace() {
   const [deleteError, setDeleteError] = useState("");
   const [pendingIds, setPendingIds] = useState([]);
   const [toast, setToast] = useState(null);
+  const [guideOpen, setGuideOpen] = useState(false);
+  useEffect(() => {
+    if (user && showOnboarding) {
+      navigate("/board");
+      setGuideOpen(true);
+      dispatch(onboardingSeen());
+    }
+  }, [user, showOnboarding, dispatch, navigate]);
 
   useEffect(() => {
     dispatch(loadWorkspace());
@@ -51,11 +67,17 @@ export default function Workspace() {
     setDeleteError("");
     try {
       const isProject = confirm.kind === "projects";
-      await dispatch(isProject ? deleteProject(confirm.id) : deleteTask(confirm.id)).unwrap();
+      await dispatch(
+        isProject ? deleteProject(confirm.id) : deleteTask(confirm.id),
+      ).unwrap();
       if (isProject) navigate("/board");
       else if (location.pathname === "/task/" + confirm.id) navigate("/tasks");
       setConfirm(null);
-      notify(isProject ? "Project deleted. Its tasks moved to Inbox." : "Task deleted.");
+      notify(
+        isProject
+          ? "Project deleted. Its tasks moved to Inbox."
+          : "Task deleted.",
+      );
     } catch (message) {
       setDeleteError(message);
     } finally {
@@ -83,10 +105,12 @@ export default function Workspace() {
           toggleTask(task),
           task.completed ? "Task reopened." : "Nice work! Task completed.",
         ),
-      onDelete: (task) => requestDelete({ kind: "tasks", id: task.id, name: task.title }),
+      onDelete: (task) =>
+        requestDelete({ kind: "tasks", id: task.id, name: task.title }),
     },
     newTask: (preset = {}) => setTaskDraft({ ...blankTask, ...preset }),
-    moveTask: (task, changes) => updateTask(task, saveTask({ id: task.id, ...changes })),
+    moveTask: (task, changes) =>
+      updateTask(task, saveTask({ id: task.id, ...changes })),
     addProject: () => setProjectDraft({}),
     editProject: (project) => setProjectDraft(project),
     removeProject: (project) =>
@@ -102,12 +126,21 @@ export default function Workspace() {
 
   return (
     <div className="app-shell">
-      <TopBar onNewTask={newTaskFromTopBar} />
+      <TopBar
+        onNewTask={newTaskFromTopBar}
+        onOpenGuide={() => {
+          navigate("/board");
+          setGuideOpen(true);
+        }}
+      />
       <main className="page">
         {error && (
           <Alert variant="danger" className="d-flex align-items-center gap-3">
             {error}
-            <button className="link-button" onClick={() => dispatch(loadWorkspace())}>
+            <button
+              className="link-button"
+              onClick={() => dispatch(loadWorkspace())}
+            >
               Try again
             </button>
           </Alert>
@@ -124,6 +157,7 @@ export default function Workspace() {
         )}
       </main>
 
+      {guideOpen && <UsageGuide onClose={() => setGuideOpen(false)} />}
       {taskDraft && (
         <TaskEditor
           key={taskDraft.id || "new"}
@@ -161,7 +195,11 @@ export default function Workspace() {
           <Toast.Body role={toast?.isError ? "alert" : "status"}>
             {toast?.isError ? <X size={17} /> : <Check size={17} />}
             <span>{toast?.text}</span>
-            <button className="toast-close" aria-label="Dismiss" onClick={() => setToast(null)}>
+            <button
+              className="toast-close"
+              aria-label="Dismiss"
+              onClick={() => setToast(null)}
+            >
               <X size={15} />
             </button>
           </Toast.Body>

@@ -5,7 +5,8 @@ export const api = axios.create({
 });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("taskflow-token");
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (token && !config.headers.Authorization)
+    config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 api.interceptors.response.use(
@@ -19,6 +20,10 @@ api.interceptors.response.use(
     return Promise.reject(error);
   },
 );
-export const errorText = (error) =>
-  error.response?.data?.message ||
-  "Cannot connect to the server. Make sure npm run dev is running.";
+export const errorText = (error) => {
+  const message = error.response?.data?.message;
+  return Array.isArray(message)
+    ? message.join(" ")
+    : message ||
+        "Cannot connect to the backend. Check that the NestJS server is running.";
+};

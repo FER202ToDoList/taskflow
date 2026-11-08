@@ -13,7 +13,7 @@ function MenuButton({ className = "", ...props }) {
   return <button type="button" {...props} className={className + " no-caret"} />;
 }
 
-export default function TopBar({ onNewTask }) {
+export default function TopBar({ onNewTask, onOpenGuide }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,7 +66,7 @@ export default function TopBar({ onNewTask }) {
 
       <nav className="view-tabs" aria-label="Views">
         {links.map(([to, label, count]) => (
-          <NavLink key={to} to={to} className="view-tab">
+          <NavLink key={to} to={to} className="view-tab" data-tour={to === "/tasks" ? "all-tasks" : undefined}>
             {label}
             {count > 0 && <span className="tab-count">{count}</span>}
           </NavLink>
@@ -74,7 +74,7 @@ export default function TopBar({ onNewTask }) {
       </nav>
 
       <div className="topbar-right">
-        <label className="search-field">
+        <label className="search-field" data-tour="search">
           <Search size={17} aria-hidden="true" />
           <input
             ref={searchRef}
@@ -113,7 +113,7 @@ export default function TopBar({ onNewTask }) {
 
           <ThemeToggle />
 
-          <button className="accent-button" onClick={onNewTask}>
+          <button className="accent-button" data-tour="new-task" onClick={onNewTask}>
             <Plus size={17} strokeWidth={2.6} />
             <span>New task</span>
           </button>
@@ -128,6 +128,7 @@ export default function TopBar({ onNewTask }) {
                 <div>{user?.email}</div>
               </Dropdown.Header>
               <Dropdown.Divider />
+              <Dropdown.Item as="button" onClick={onOpenGuide}>Hướng dẫn sử dụng</Dropdown.Item>
               <Dropdown.Item as="button" onClick={logout}>
                 <LogOut size={15} /> Log out
               </Dropdown.Item>
