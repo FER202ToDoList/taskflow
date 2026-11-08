@@ -6,7 +6,7 @@ import { Plus } from "lucide-react";
 export default function ProjectBar({ onAddProject }) {
   const { projects, tasks } = useSelector((s) => s.app);
   return (
-    <nav className="project-bar" aria-label="Projects">
+    <nav data-tour="projects" className="project-bar" aria-label="Projects">
       {projects.map((p) => (
         <NavLink key={p.id} to={"/project/" + p.id} className="project-chip">
           <span className="dot" style={{ background: p.color }} />
@@ -16,7 +16,7 @@ export default function ProjectBar({ onAddProject }) {
           </span>
         </NavLink>
       ))}
-      <button className="project-chip add" aria-label="Add project" onClick={onAddProject}>
+      <button className="project-chip add" aria-label="Add project" title="New project" onClick={onAddProject}>
         <Plus size={15} />
       </button>
     </nav>

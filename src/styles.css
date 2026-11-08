@@ -937,17 +937,6 @@ h3 {
   height: 46px;
   margin-top: 4px;
 }
-.demo-button {
-  width: 100%;
-  height: 46px;
-  margin-top: 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border-strong);
-  font-weight: 700;
-}
-.demo-button:hover {
-  background: var(--hover);
-}
 .auth-switch {
   text-align: center;
   margin: 18px 0 0;
@@ -1275,3 +1264,11 @@ button.status-badge:hover {
     gap: 4px;
   }
 }
+
+
+.tour-highlight { position: fixed; z-index: 1050; pointer-events: none; outline: 3px solid #568cff; border-radius: 10px; box-shadow: 0 0 0 9999px #0007; }
+.usage-guide { pointer-events: none; }
+.usage-guide .modal-dialog { pointer-events: auto; position: fixed; bottom: 12px; right: 12px; margin: 0; width: min(460px, calc(100vw - 24px)); max-height: 55vh; }
+.usage-guide .modal-content { max-height: 55vh; overflow: auto; }
+
+.tour-shade { position: fixed; inset: 0; z-index: 1049; }

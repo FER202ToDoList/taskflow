@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Routes, Route, Navigate } from "react-router";
 import { signedOut } from "./store";
 import Auth from "./pages/Auth";
+import PasswordRecovery from "./pages/PasswordRecovery";
 import Workspace from "./pages/Workspace";
 import BoardPage from "./pages/BoardPage";
 import TaskPage from "./pages/TaskPage";
@@ -27,6 +28,8 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/forgot-password" element={<PasswordRecovery />} />
+      <Route path="/reset-password" element={<PasswordRecovery reset />} />
       <Route path="/login" element={token ? <Navigate to="/board" replace /> : <Auth />} />
       <Route element={token ? <Workspace /> : <Navigate to="/login" replace />}>
         <Route path="/board" element={<BoardPage />} />

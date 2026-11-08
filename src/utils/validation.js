@@ -3,15 +3,15 @@ import * as Yup from "yup";
 export const authSchema = (register) =>
   Yup.object({
     name: register
-      ? Yup.string().trim().required("Enter your name.").max(80)
+      ? Yup.string().trim().required("Enter your name.").min(2).max(80)
       : Yup.string(),
     email: Yup.string()
       .trim()
       .email("Enter a valid email.")
-      .required("Enter your email."),
+      .required("Enter your email.").max(254),
     password: Yup.string()
       .required("Enter your password.")
-      .min(8, "Use at least 8 characters."),
+      .min(8, "Use at least 8 characters.").max(72),
   });
 
 export const taskSchema = Yup.object({

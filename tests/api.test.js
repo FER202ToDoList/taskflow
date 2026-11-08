@@ -1,172 +1,58 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-test("JWT, user isolation, tasks and projects CRUD, SQLite persistence", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "taskflow-test-"));
-  const base = "http://localhost:3099/api";
-  let child;
-  async function start() {
-    child = spawn(process.execPath, ["server/index.js"], {
-      env: {
-        ...process.env,
-        PORT: "3099",
-        DB_FILE: join(dir, "test.db"),
-        JWT_SECRET: "test-secret",
-      },
-      stdio: "ignore",
-    });
-    for (let n = 0; n < 60; n++) {
-      try {
-        if ((await fetch(base + "/health")).ok) return;
-      } catch {}
-      await new Promise((r) => setTimeout(r, 100));
-    }
-    throw new Error("Server did not start");
-  }
-  async function stop() {
-    await new Promise((resolve) => {
-      child.once("exit", resolve);
-      child.kill();
-    });
-  }
-  const request = (path, method = "GET", body, token) =>
-    fetch(base + path, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: "Bearer " + token } : {}),
-      },
-      ...(body ? { body: JSON.stringify(body) } : {}),
-    });
-  try {
-    await start();
-    assert.equal((await request("/tasks")).status, 401);
-    const register = await request("/auth/register", "POST", {
-      name: "Test user",
-      email: "test@example.com",
-      password: "Test123!",
-    });
-    assert.equal(register.status, 201);
-    const { token } = await register.json();
-    const other = await (
-      await request("/auth/register", "POST", {
-        name: "Other user",
-        email: "other@example.com",
-        password: "Test123!",
-      })
-    ).json();
-    assert.equal(
-      (
-        await request("/auth/login", "POST", {
-          email: "test@example.com",
-          password: "incorrect",
-        })
-      ).status,
-      401,
-    );
-    assert.equal(
-      (await request("/tasks", "GET", null, token.slice(0, -2) + "xx")).status,
-      401,
-    );
-    const project = await (
-      await request(
-        "/projects",
-        "POST",
-        { name: "Test project", color: "#4073d6" },
-        token,
-      )
-    ).json();
-    const renamed = await request(
-      "/projects/" + project.id,
-      "PATCH",
-      { name: "Renamed project", color: "#45a478" },
-      token,
-    );
-    assert.equal(renamed.status, 200);
-    assert.equal((await renamed.json()).name, "Renamed project");
-    assert.equal(
-      (
-        await request(
-          "/projects/" + project.id,
-          "PATCH",
-          { name: "Not mine" },
-          other.token,
-        )
-      ).status,
-      404,
-    );
-    assert.equal(
-      (
-        await request("/projects/" + project.id, "PATCH", { name: " " }, token)
-      ).status,
-      400,
-    );
-    const task = await (
-      await request(
-        "/tasks",
-        "POST",
-        {
-          title: "Persist me",
-          description: "API test",
-          priority: 1,
-          due_date: "2026-10-08",
-          project_id: project.id,
-        },
-        token,
-      )
-    ).json();
-    assert.ok(task.id);
-    assert.equal(
-      (
-        await request(
-          "/tasks/" + task.id,
-          "PATCH",
-          { completed: true },
-          other.token,
-        )
-      ).status,
-      404,
-    );
-    assert.equal(
-      (
-        await request(
-          "/tasks",
-          "POST",
-          { title: "Bad date", due_date: "2026-02-31" },
-          token,
-        )
-      ).status,
-      400,
-    );
-    const changed = await (
-      await request(
-        "/tasks/" + task.id,
-        "PATCH",
-        { completed: true, title: "Edited" },
-        token,
-      )
-    ).json();
-    assert.equal(changed.completed, true);
-    assert.equal(changed.title, "Edited");
-    await stop();
-    await start();
-    const tasks = await (await request("/tasks", "GET", null, token)).json();
-    assert.equal(tasks.find((t) => t.id === task.id).completed, true);
-    assert.equal(
-      (await request("/projects/" + project.id, "DELETE", null, token)).status,
-      204,
-    );
-    const moved = await (await request("/tasks", "GET", null, token)).json();
-    assert.equal(moved.find((t) => t.id === task.id).project_id, null);
-    assert.equal(
-      (await request("/tasks/" + task.id, "DELETE", null, token)).status,
-      204,
-    );
-  } finally {
-    if (child?.exitCode === null) await stop();
-    rmSync(dir, { recursive: true, force: true });
-  }
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+const base = process.env.TEST_API_URL || 'http://127.0.0.1:3101';
+const request = async (path, method = 'GET', body, token) => {
+  const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? {Authorization: `Bearer ${token}`} : {}) }, ...(body === undefined ? {} : {body: JSON.stringify(body)}) });
+  const data = response.status === 204 ? null : await response.json();
+  return {status: response.status, data};
+};
+test('NestJS: first login, ownership, task/project lifecycle and password recovery', async () => {
+  const email = `api-${Date.now()}@example.com`, password = 'Test123!';
+  assert.equal((await request('/tasks')).status, 401);
+  const register = await request('/auth/register', 'POST', {fullName: 'API Test', email, password});
+  assert.equal(register.status, 201); assert.equal(register.data.token, undefined);
+  assert.equal((await request('/auth/login', 'POST', {email, password: 'Wrong123!'})).status, 401);
+  const first = await request('/auth/login', 'POST', {email, password});
+  assert.equal(first.data.showOnboarding, true); const token = first.data.token;
+  assert.equal((await request('/auth/login', 'POST', {email, password})).data.showOnboarding, false);
+  assert.equal((await request('/auth/me', 'GET', undefined, token)).data.fullName, 'API Test');
+  const project = await request('/projects', 'POST', {name: 'Work', color: '#4073d6'}, token);
+  assert.equal(project.status, 201); const projectId = project.data.id;
+  assert.equal((await request(`/projects/${projectId}`, 'PATCH', {name: 'Renamed', color: '#123456'}, token)).data.name, 'Renamed');
+  assert.equal((await request(`/projects/${projectId}`, 'PATCH', {name: null}, token)).status, 400);
+  assert.equal((await request(`/projects/${projectId}`, 'PATCH', {color: null}, token)).status, 400);
+  const task = await request('/tasks', 'POST', {title: 'Task', dueDate: '2026-12-01', priority: 1, projectId}, token);
+  assert.equal(task.status, 201); assert.equal(typeof task.data.id, 'number'); const id = task.data.id;
+  assert.equal((await request(`/tasks/${id}`, 'PATCH', {isCompleted: true}, token)).data.isCompleted, true);
+  assert.equal((await request(`/tasks/${id}`, 'PATCH', {isCompleted: false, dueDate: null}, token)).data.dueDate, null);
+  assert.equal((await request('/tasks', 'POST', {title: 'Bad date', dueDate: '2026-02-30'}, token)).status, 400);
+  assert.equal((await request('/tasks', 'POST', {title: 'Wrong contract', completed: true}, token)).status, 400);
+  const otherEmail = `other-${Date.now()}@example.com`;
+  await request('/auth/register', 'POST', {fullName: 'Other Test', email: otherEmail, password});
+  const otherToken = (await request('/auth/login', 'POST', {email: otherEmail, password})).data.token;
+  for (const method of ['GET', 'PATCH', 'DELETE']) assert.equal((await request(`/tasks/${id}`, method, method === 'PATCH' ? {title:'Stolen'} : undefined, otherToken)).status, 404);
+  assert.equal((await request(`/projects/${projectId}`, 'PATCH', {name: 'Stolen'}, otherToken)).status, 404);
+  assert.equal((await request(`/projects/${projectId}`, 'DELETE', undefined, otherToken)).status, 404);
+  assert.deepEqual((await request('/tasks', 'GET', undefined, otherToken)).data, []);
+  assert.equal((await request(`/projects/${projectId}`, 'DELETE', undefined, token)).status, 204);
+  assert.equal((await request(`/tasks/${id}`, 'GET', undefined, token)).data.projectId, null);
+  assert.equal((await request(`/tasks/${id}`, 'DELETE', undefined, token)).status, 204);
+  assert.equal((await request('/auth/forgot-password', 'POST', {email})).status, 200);
+  const resetToken = (await request(`/__test/reset-token?email=${encodeURIComponent(email)}`)).data.token;
+  assert.match(resetToken, /^[a-f0-9]{64}$/);
+  const nextPassword = 'Changed123!';
+  assert.equal((await request('/auth/reset-password', 'POST', {token: resetToken, password: nextPassword})).status, 200);
+  assert.equal((await request('/auth/reset-password', 'POST', {token: resetToken, password: nextPassword})).status, 400);
+  assert.equal((await request('/auth/me', 'GET', undefined, token)).status, 401);
+  assert.equal((await request('/auth/login', 'POST', {email, password})).status, 401);
+  assert.equal((await request('/auth/login', 'POST', {email, password: nextPassword})).data.showOnboarding, false);
+  await request('/auth/forgot-password', 'POST', {email});
+  const expired = (await request(`/__test/reset-token?email=${encodeURIComponent(email)}`)).data.token;
+  await request('/__test/expire-token', 'POST', {});
+  assert.equal((await request('/auth/reset-password', 'POST', {token: expired, password})).status, 400);
+  // Concurrent first logins must claim the flag only once.
+  const parallelEmail = `parallel-${Date.now()}@example.com`;
+  await request('/auth/register', 'POST', {fullName:'Parallel Test',email:parallelEmail,password});
+  const logins = await Promise.all([1,2].map(() => request('/auth/login','POST',{email:parallelEmail,password})));
+  assert.equal(logins.filter(x=>x.data.showOnboarding).length,1);
 });

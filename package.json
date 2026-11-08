@@ -7,23 +7,19 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "concurrently -k \"npm:dev:client\" \"npm:dev:server\"",
+    "dev": "vite --host 127.0.0.1",
     "dev:client": "vite --host 127.0.0.1",
-    "dev:server": "node --watch server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/index.js",
-    "test": "node --test tests/api.test.js",
-    "test:e2e": "playwright test"
+    "test": "node --test tests/models.test.js",
+    "test:e2e": "playwright test",
+    "test:api": "node --test tests/api.test.js"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.13.0",
     "axios": "^1.20.0",
     "bootstrap": "^5.3.8",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
     "formik": "^2.4.9",
-    "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.52.0",
     "react": "^19.3.0",
     "react-bootstrap": "^2.10.10",
@@ -35,7 +31,6 @@
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "concurrently": "^10.0.5",
     "vite": "^8.3.3"
   }
 }
